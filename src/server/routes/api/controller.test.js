@@ -142,4 +142,18 @@ describe('#apiController', () => {
       message: 'Failed to fetch AURN data from Aqie Back End'
     })
   })
+
+  test('Should return 500 for GET /api/forecasts when upstream request fails', async () => {
+    mockGetForecasts.mockRejectedValue(new Error('upstream failed'))
+
+    const { result, statusCode } = await server.inject({
+      method: 'GET',
+      url: '/api/forecasts'
+    })
+
+    expect(statusCode).toBe(statusCodes.internalServerError)
+    expect(result).toEqual({
+      message: 'Failed to fetch data from upstream API'
+    })
+  })
 })

@@ -140,17 +140,6 @@ function resetDom() {
               <summary class="govuk-details__summary"><span class="govuk-details__summary-text">Data sources</span></summary>
               <div class="govuk-details__text"><p class="govuk-body-s govuk-!-margin-bottom-0">Automatic Urban and Rural Network (AURN)</p></div>
             </details>
-            <details class="govuk-details govuk-!-margin-top-2 govuk-!-margin-bottom-0">
-              <summary class="govuk-details__summary"><span class="govuk-details__summary-text">Map features</span></summary>
-              <div class="govuk-details__text">
-                <div class="govuk-checkboxes govuk-checkboxes--small">
-                  <div class="govuk-checkboxes__item">
-                    <input class="govuk-checkboxes__input" id="filter-show-inactive" type="checkbox" name="filter-show-inactive" value="inactive" checked>
-                    <label class="govuk-label govuk-checkboxes__label" for="filter-show-inactive">Show closed and inactive stations</label>
-                  </div>
-                </div>
-              </div>
-            </details>
           </div>
         </div>
       </div>
@@ -271,17 +260,6 @@ beforeEach(async () => {
             <details class="govuk-details govuk-!-margin-top-3 govuk-!-margin-bottom-0">
               <summary class="govuk-details__summary"><span class="govuk-details__summary-text">Data sources</span></summary>
               <div class="govuk-details__text"><p class="govuk-body-s govuk-!-margin-bottom-0">Automatic Urban and Rural Network (AURN)</p></div>
-            </details>
-            <details class="govuk-details govuk-!-margin-top-2 govuk-!-margin-bottom-0">
-              <summary class="govuk-details__summary"><span class="govuk-details__summary-text">Map features</span></summary>
-              <div class="govuk-details__text">
-                <div class="govuk-checkboxes govuk-checkboxes--small">
-                  <div class="govuk-checkboxes__item">
-                    <input class="govuk-checkboxes__input" id="filter-show-inactive" type="checkbox" name="filter-show-inactive" value="inactive" checked>
-                    <label class="govuk-label govuk-checkboxes__label" for="filter-show-inactive">Show closed and inactive stations</label>
-                  </div>
-                </div>
-              </div>
             </details>
           </div>
         </div>
@@ -687,13 +665,14 @@ describe('#DAQI markers', () => {
     expect(selectedCall[2].symbolSvgContent).toContain('fill="#555555"')
   })
 
-  test('Should not assign DAQI to a closed station', async () => {
+  test('Should not plot a closed station', async () => {
     const closedStation = { ...station, stationStatus: 'closed' }
     await loadWithForecasts([closedStation], forecastAt(51.5, -0.1, 5))
-    const call = mockMapInstance.addMarker.mock.calls[0]
-    // Closed → DAQI null → grey, no DAQI label
-    expect(call[2].symbolSvgContent).toContain('fill="#777777"')
-    expect(call[2].symbolSvgContent).not.toContain('#ffcf00')
+    expect(mockMapInstance.addMarker).not.toHaveBeenCalledWith(
+      expect.stringContaining('UKA001'),
+      expect.any(Array),
+      expect.any(Object)
+    )
   })
 
   test('Should skip forecast entry with no coordinates and still match the next', async () => {
@@ -916,10 +895,25 @@ describe('#station panel', () => {
       closeDate: '2020-12-31'
     }
     await loadStationsAndIdle([closedStation])
-    mapClickCallback({ coords: [-0.1, 51.5] })
+    globalThis.navigateToStation(closedStation)
     const details = document.getElementById('sp-details')
     expect(details.textContent).toContain('End date')
     expect(details.textContent).toContain('31 December 2020')
+  })
+
+  test('Should not select a closed station via ambient map click', async () => {
+    const closedStation = {
+      localSiteID: 'UKA001',
+      name: 'Old Station',
+      location: { coordinates: [51.5, -0.1] },
+      stationStatus: 'closed',
+      closeDate: '2020-12-31'
+    }
+    await loadStationsAndIdle([closedStation])
+    mapClickCallback({ coords: [-0.1, 51.5] })
+    expect(
+      document.getElementById('station-panel').classList.contains('visible')
+    ).toBe(false)
   })
 
   test('Should fall back to the raw code for an unrecognised pollutant', async () => {
@@ -1290,6 +1284,17 @@ describe('#marker keyboard accessibility', () => {
     expect(nonMarker.getAttribute('tabindex')).toBeNull()
   })
 
+  test('Should not re-initialise a marker element that already has keyboard-init set', async () => {
+    await loadWithMarkerDom([station])
+    const markerEl = document.getElementById('map-marker-ms-UKA001')
+    const addEventSpy = vi.spyOn(markerEl, 'addEventListener')
+    // Remove and re-add to trigger the MutationObserver again
+    markerEl.remove()
+    document.getElementById('map').appendChild(markerEl)
+    await Promise.resolve()
+    expect(addEventSpy).not.toHaveBeenCalled()
+  })
+
   test('Should blur a focused marker on mousedown on the map container', async () => {
     await loadWithMarkerDom([station])
     const markerEl = document.getElementById('map-marker-ms-UKA001')
@@ -1433,8 +1438,6 @@ describe('#filter panel', () => {
     await loadAndIdleWithFilter()
     const sections = document.getElementById('filter-sections')
     expect(sections.textContent).toContain('Data sources')
-    expect(sections.textContent).toContain('Map features')
-    expect(sections.textContent).toContain('Show closed and inactive stations')
   })
 
   test('Should add a Menu button to the reopen stack', async () => {
@@ -1587,26 +1590,11 @@ describe('#filter panel', () => {
       document.querySelectorAll(
         '.aq-filter-panel__scroll input[type="checkbox"]'
       )
-    ).filter((el) => el.id !== 'filter-show-inactive')
+    )
     pollutantCheckboxes.forEach((checkbox) => {
       checkbox.checked = false
       checkbox.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    expect(mockMapInstance.removeMarker).toHaveBeenCalledWith('ms-UKA001')
-  })
-
-  test('Should hide closed station when show inactive is unchecked', async () => {
-    const closedStation = {
-      localSiteID: 'UKA001',
-      location: { coordinates: [51.5, -0.1] },
-      stationStatus: 'closed',
-      pollutants: ['NO2']
-    }
-    await loadAndIdleWithFilter({ stations: [closedStation] })
-    mockMapInstance.removeMarker.mockClear()
-    const showInactiveCheckbox = document.getElementById('filter-show-inactive')
-    showInactiveCheckbox.checked = false
-    showInactiveCheckbox.dispatchEvent(new Event('change', { bubbles: true }))
     expect(mockMapInstance.removeMarker).toHaveBeenCalledWith('ms-UKA001')
   })
 
@@ -1620,35 +1608,36 @@ describe('#filter panel', () => {
     expect(mockMapInstance.addMarker).not.toHaveBeenCalled()
   })
 
-  test('Should keep show-inactive checkbox unchecked after being toggled off', async () => {
-    await loadAndIdleWithFilter()
-    const showInactiveCheckbox = document.getElementById('filter-show-inactive')
-    showInactiveCheckbox.checked = false
-    showInactiveCheckbox.dispatchEvent(new Event('change', { bubbles: true }))
-    // Switch tabs — HTML is not rebuilt, so checked state is preserved
-    document.getElementById('filter-tab-other').click()
-    document.getElementById('filter-tab-daqi').click()
-    expect(document.getElementById('filter-show-inactive').checked).toBe(false)
+  test('Should never plot a closed station', async () => {
+    const stations = [
+      {
+        localSiteID: 'UKA001',
+        location: { coordinates: [51.5, -0.1] },
+        stationStatus: 'closed',
+        pollutants: ['NO2']
+      }
+    ]
+    await loadAndIdleWithFilter({ stations })
+    expect(mockMapInstance.addMarker).not.toHaveBeenCalledWith(
+      'ms-UKA001',
+      expect.any(Array),
+      expect.any(Object)
+    )
   })
 
-  test('Should keep an active station visible when show inactive is unchecked', async () => {
-    const activeStation = {
-      localSiteID: 'UKA001',
-      location: { coordinates: [51.5, -0.1] },
-      stationStatus: 'current',
-      pollutants: ['NO2']
-    }
-    await loadAndIdleWithFilter({ stations: [activeStation] })
-    const showInactiveCheckbox = document.getElementById('filter-show-inactive')
-    showInactiveCheckbox.checked = false
-    showInactiveCheckbox.dispatchEvent(new Event('change', { bubbles: true }))
-    mockMapInstance.addMarker.mockClear()
-    // Re-plot by switching tabs
-    document.getElementById('filter-tab-other').click()
-    document.getElementById('filter-tab-daqi').click()
-    expect(mockMapInstance.addMarker).toHaveBeenCalledWith(
-      'ms-UKA001',
-      [-0.1, 51.5],
+  test('Should never plot an inactive station', async () => {
+    const stations = [
+      {
+        localSiteID: 'UKA002',
+        location: { coordinates: [52.0, -0.2] },
+        stationStatus: 'inactive',
+        pollutants: ['PM10']
+      }
+    ]
+    await loadAndIdleWithFilter({ stations })
+    expect(mockMapInstance.addMarker).not.toHaveBeenCalledWith(
+      'ms-UKA002',
+      expect.any(Array),
       expect.any(Object)
     )
   })
@@ -1674,6 +1663,32 @@ describe('#filter panel', () => {
       expect.any(Object)
     )
     expect(mockMapInstance.removeMarker).not.toHaveBeenCalledWith('ms-UKA001')
+  })
+
+  test('Should sort two stations at the same latitude by DAQI', async () => {
+    const stations = [
+      {
+        localSiteID: 'UKA001',
+        location: { coordinates: [51.5, -0.1] },
+        pollutants: ['NO2']
+      },
+      {
+        localSiteID: 'UKA002',
+        location: { coordinates: [51.5, -0.2] },
+        pollutants: ['O3']
+      }
+    ]
+    await loadAndIdleWithFilter({ stations })
+    expect(mockMapInstance.addMarker).toHaveBeenCalledWith(
+      'ms-UKA001',
+      expect.any(Array),
+      expect.any(Object)
+    )
+    expect(mockMapInstance.addMarker).toHaveBeenCalledWith(
+      'ms-UKA002',
+      expect.any(Array),
+      expect.any(Object)
+    )
   })
 
   test('Should do nothing when filter panel element is not in DOM', async () => {

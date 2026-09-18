@@ -10,6 +10,7 @@ import {
 } from './map-utils.js'
 import {
   stationMatchesFilter,
+  isActiveStation,
   initFilterPanel,
   filterState
 } from './map-filter-panel.js'
@@ -403,9 +404,21 @@ function initForecastDayControls(onDayChange) {
 
 /**
  * (Re)plots all markers that pass the current filter, removing any that no longer match.
+ * Sorted north-to-south, then lowest-DAQI first within each latitude so that the
+ * highest-DAQI marker is added last and renders on top.
  */
 function plotAllMarkers() {
-  sortedStationsByLat.forEach((station) => {
+  const sortByLatThenDaqi = [...sortedStationsByLat].sort((a, b) => {
+    const latA = Number.parseFloat(a.location?.coordinates?.[0]) || 0
+    const latB = Number.parseFloat(b.location?.coordinates?.[0]) || 0
+    if (latA !== latB) {
+      return latB - latA
+    }
+    const daqiA = stationDaqi(a) ?? 0
+    const daqiB = stationDaqi(b) ?? 0
+    return daqiA - daqiB
+  })
+  sortByLatThenDaqi.forEach((station) => {
     if (!hasValidCoords(station)) {
       return
     }
@@ -637,7 +650,7 @@ map.on('map:click', (evt) => {
   let best = null
   let bestDist = Infinity
   sortedStationsByLat.forEach((station) => {
-    if (!hasValidCoords(station)) {
+    if (!hasValidCoords(station) || !isActiveStation(station)) {
       return
     }
     const lat = Number.parseFloat(station.location.coordinates[0])

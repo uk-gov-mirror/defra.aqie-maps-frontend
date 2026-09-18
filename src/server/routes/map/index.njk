@@ -107,19 +107,7 @@
               summaryText: "Data sources",
               html: "<p class='govuk-body-s govuk-!-margin-bottom-0'>Automatic Urban and Rural Network (AURN)</p>"
             }) }}
-            {% set mapFeaturesHtml %}
-              <div class="govuk-checkboxes govuk-checkboxes--small">
-                <div class="govuk-checkboxes__item">
-                  <input class="govuk-checkboxes__input" id="filter-show-inactive" type="checkbox" name="filter-show-inactive" value="inactive" checked>
-                  <label class="govuk-label govuk-checkboxes__label" for="filter-show-inactive">Show closed and inactive stations</label>
-                </div>
-              </div>
-            {% endset %}
-            {{ govukDetails({
-              classes: "govuk-!-margin-top-2 govuk-!-margin-bottom-0",
-              summaryText: "Map features",
-              html: mapFeaturesHtml
-            }) }}
+
           </div>
         </div>
       </div>

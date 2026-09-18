@@ -7,31 +7,32 @@ const filterState = {
   selected: new Set(['NO2', 'O3', 'SO2', 'PM25', 'PM10'])
 }
 
-let showInactiveStations = true
+const ACTIVE_STATUSES = new Set(['', 'current', 'active'])
 
 /**
- * Returns true when a station's status indicates it is currently active.
+ * Returns true if the station is open (not closed/inactive).
  * @param {object} station
  * @returns {boolean}
  */
-function stationIsActive(station) {
-  const st = (
+function isActiveStation(station) {
+  const stationStatus = (
     station.stationStatus ||
     station.status ||
     station.siteStatus ||
     ''
   ).toLowerCase()
-  return !st || st === 'current' || st === 'active'
+  return ACTIVE_STATUSES.has(stationStatus)
 }
 
 /**
- * Returns true if the station should be shown given the current filter state.
- * Stations with no pollutant data are always shown (data may not have loaded yet).
+ * Returns true if the station should be plotted on the map.
+ * Closed and inactive stations are always excluded.
+ * Stations with no pollutant data are always included (data may not have loaded yet).
  * @param {object} station
  * @returns {boolean}
  */
 function stationMatchesFilter(station) {
-  if (!showInactiveStations && !stationIsActive(station)) {
+  if (!isActiveStation(station)) {
     return false
   }
   if (filterState.mode === 'other') {
@@ -180,15 +181,11 @@ function initPollutantCheckboxes(onFilterChange) {
     if (event.target?.type !== 'checkbox') {
       return
     }
-    if (event.target.id === 'filter-show-inactive') {
-      showInactiveStations = event.target.checked
+    const codes = event.target.value.split(',')
+    if (event.target.checked) {
+      codes.forEach((code) => filterState.selected.add(code))
     } else {
-      const codes = event.target.value.split(',')
-      if (event.target.checked) {
-        codes.forEach((code) => filterState.selected.add(code))
-      } else {
-        codes.forEach((code) => filterState.selected.delete(code))
-      }
+      codes.forEach((code) => filterState.selected.delete(code))
     }
     onFilterChange()
   })
@@ -224,4 +221,4 @@ function initFilterPanel(onFilterChange) {
   initPollutantCheckboxes(onFilterChange)
 }
 
-export { filterState, stationMatchesFilter, initFilterPanel }
+export { filterState, stationMatchesFilter, isActiveStation, initFilterPanel }
